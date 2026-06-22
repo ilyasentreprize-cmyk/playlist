@@ -37,6 +37,34 @@ export default function TasteCollection({
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Recommandations dynamiques
+  const [reco, setReco] = useState<ArtistResult[]>([]);
+  const recoDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Charge les recommandations — au mount (rap) puis à chaque changement de sélection
+  function loadReco(sel: ArtistResult[]) {
+    if (recoDebounceRef.current) clearTimeout(recoDebounceRef.current);
+    recoDebounceRef.current = setTimeout(async () => {
+      const selectedIds = sel.map((a) => a.id).join(",");
+      const excludeIds = sel.map((a) => a.id).join(",");
+      const params = new URLSearchParams();
+      if (selectedIds) params.set("selectedIds", selectedIds);
+      if (excludeIds) params.set("exclude", excludeIds);
+      try {
+        const res = await fetch(`/api/recommendations/artists?${params}`);
+        const data = await res.json();
+        // Filtre côté client aussi pour être sûr
+        const selSet = new Set(sel.map((a) => a.id));
+        setReco((data.artists ?? []).filter((a: ArtistResult) => !selSet.has(a.id)));
+      } catch {
+        /* silencieux : les reco sont un bonus */
+      }
+    }, 400);
+  }
+
+  // Chargement initial
+  useEffect(() => { loadReco([]); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     const q = query.trim();
@@ -58,9 +86,13 @@ export default function TasteCollection({
   }, [query]);
 
   function toggleArtist(a: ArtistResult) {
-    setSelected((prev) =>
-      prev.some((x) => x.id === a.id) ? prev.filter((x) => x.id !== a.id) : [...prev, a]
-    );
+    setSelected((prev) => {
+      const next = prev.some((x) => x.id === a.id)
+        ? prev.filter((x) => x.id !== a.id)
+        : [...prev, a];
+      loadReco(next);
+      return next;
+    });
   }
 
   const [submitting, setSubmitting] = useState(false);
@@ -195,6 +227,24 @@ export default function TasteCollection({
           </div>
         )}
 
+        {/* Recommandations dynamiques */}
+        {reco.length > 0 && query.trim().length < 2 && (
+          <div className="stack">
+            <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
+              {selected.length === 0 ? "🎤 Suggestions rap" : "🎯 Artistes similaires à tes choix"}
+            </p>
+            {reco.map((a) => (
+              <div key={a.id} className="list-item selectable" onClick={() => toggleArtist(a)}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img className="thumb" src={a.picture ?? ""} alt="" />
+                <div className="grow ellipsis">{a.name}</div>
+                <div>+</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Résultats de recherche */}
         <div className="stack">
           {searching && <p className="muted">Recherche…</p>}
           {results.map((a) => {
