@@ -1,11 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { registerPlay, unregisterPlay } from "@/lib/audioManager";
 
-// Bouton play/pause d'un extrait 30s.
-// - Si `preview` (Deezer) est fourni, on le joue directement.
-// - Sinon, au premier clic, on tente le fallback iTunes via /api/preview.
-// - Si aucun extrait n'existe, le bouton est désactivé (jamais bloquant).
 export default function AudioPreview({
   preview,
   title,
@@ -21,23 +18,26 @@ export default function AudioPreview({
   const [loading, setLoading] = useState(false);
   const [noPreview, setNoPreview] = useState(false);
 
-  // Reset quand on change de morceau.
   useEffect(() => {
     setUrl(preview);
     setNoPreview(false);
-    setPlaying(false);
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-    }
+    stop();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preview, title, artist]);
 
-  // Nettoyage à l'unmount.
   useEffect(() => {
-    return () => {
-      audioRef.current?.pause();
-    };
+    return () => stop();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function stop() {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      unregisterPlay(audioRef.current);
+      audioRef.current = null;
+    }
+    setPlaying(false);
+  }
 
   async function resolveItunes(): Promise<string | null> {
     try {
@@ -53,8 +53,7 @@ export default function AudioPreview({
 
   async function toggle() {
     if (audioRef.current && playing) {
-      audioRef.current.pause();
-      setPlaying(false);
+      stop();
       return;
     }
 
@@ -63,17 +62,18 @@ export default function AudioPreview({
       setLoading(true);
       src = await resolveItunes();
       setLoading(false);
-      if (!src) {
-        setNoPreview(true);
-        return;
-      }
+      if (!src) { setNoPreview(true); return; }
       setUrl(src);
     }
 
     const audio = new Audio(src);
-    audio.onended = () => setPlaying(false);
+    audio.onended = () => { unregisterPlay(audio); setPlaying(false); };
     audio.onpause = () => setPlaying(false);
     audioRef.current = audio;
+
+    // Enregistre auprès du gestionnaire global — stoppe l'éventuel autre son.
+    registerPlay(audio, () => setPlaying(false));
+
     try {
       await audio.play();
       setPlaying(true);
@@ -82,12 +82,11 @@ export default function AudioPreview({
     }
   }
 
-  const disabled = noPreview;
   return (
     <button
       className="icon-btn"
       onClick={toggle}
-      disabled={disabled}
+      disabled={noPreview}
       aria-label={playing ? "Pause" : "Écouter l'extrait"}
       title={noPreview ? "Aucun extrait disponible" : "Écouter 30s"}
     >

@@ -21,6 +21,7 @@ interface DeezerTrack {
   preview?: string;
   artist?: { id: number; name: string };
   album?: { cover_medium?: string; cover?: string };
+  contributors?: { id: number; name: string }[];
 }
 
 interface DeezerList<T> {
@@ -50,10 +51,18 @@ function mapArtist(a: DeezerArtist): ArtistResult {
 }
 
 function mapTrack(t: DeezerTrack): TrackResult {
+  const mainArtist = t.artist?.name ?? "Artiste inconnu";
+  // Les contributors incluent l'artiste principal + les feat. — on filtre le principal.
+  const featured = (t.contributors ?? [])
+    .filter((c) => c.name !== mainArtist)
+    .map((c) => c.name);
+  const artistName =
+    featured.length > 0 ? `${mainArtist} ft. ${featured.join(", ")}` : mainArtist;
+
   return {
     id: String(t.id),
     title: t.title,
-    artistName: t.artist?.name ?? "Artiste inconnu",
+    artistName,
     artistId: t.artist ? String(t.artist.id) : null,
     cover: t.album?.cover_medium ?? t.album?.cover ?? null,
     preview: t.preview && t.preview.length > 0 ? t.preview : null,
