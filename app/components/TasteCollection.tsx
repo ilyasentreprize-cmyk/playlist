@@ -87,7 +87,7 @@ export default function TasteCollection({
 
   // ---- Étape 2b : like de sons ----
   const [pool, setPool] = useState<PoolTrack[]>([]);
-  const [visibleCount, setVisibleCount] = useState(BATCH_SIZE);
+  const [batchOffset, setBatchOffset] = useState(0);
   const [liked, setLiked] = useState<Record<string, PoolTrack>>({});
   const [poolError, setPoolError] = useState<string | null>(null);
 
@@ -220,7 +220,7 @@ export default function TasteCollection({
   }
 
   // phase === "tracks"
-  const visible = pool.slice(0, visibleCount);
+  const visible = pool.slice(batchOffset, batchOffset + BATCH_SIZE);
   const likedCount = Object.keys(liked).length;
 
   // Morceaux de recherche non déjà dans le pool (évite les doublons visuels)
@@ -283,10 +283,26 @@ export default function TasteCollection({
         {visible.map((t) => <TrackRow key={t.id} t={t} showOrigin />)}
       </div>
 
-      {visibleCount < pool.length && (
-        <button className="btn secondary" onClick={() => setVisibleCount((c) => c + BATCH_SIZE)}>
-          Voir 10 sons de plus
-        </button>
+      {pool.length > BATCH_SIZE && (
+        <div className="row">
+          <button
+            className="btn secondary"
+            onClick={() => setBatchOffset((o) => Math.max(0, o - BATCH_SIZE))}
+            disabled={batchOffset === 0}
+          >
+            ← Précédents
+          </button>
+          <span className="muted" style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}>
+            {Math.floor(batchOffset / BATCH_SIZE) + 1} / {Math.ceil(pool.length / BATCH_SIZE)}
+          </span>
+          <button
+            className="btn secondary"
+            onClick={() => setBatchOffset((o) => Math.min(pool.length - BATCH_SIZE, o + BATCH_SIZE))}
+            disabled={batchOffset + BATCH_SIZE >= pool.length}
+          >
+            Suivants →
+          </button>
+        </div>
       )}
 
       <button className="btn" onClick={finishTracks} disabled={finishing}>
