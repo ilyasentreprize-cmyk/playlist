@@ -273,29 +273,27 @@ export default function TasteCollection({
   const visible = pool.slice(batchOffset, batchOffset + BATCH_SIZE);
   const likedCount = Object.keys(liked).length;
 
-  // Morceaux de recherche non déjà dans le pool (évite les doublons visuels)
   const poolIds = new Set(pool.map((t) => t.id));
   const filteredSearchResults = trackResults.filter((t) => !poolIds.has(t.id));
 
-  function TrackRow({ t, showOrigin = false }: { t: PoolTrack; showOrigin?: boolean }) {
+  function TrackCard({ t }: { t: PoolTrack }) {
     const isLiked = !!liked[t.id];
     return (
-      <div className={`list-item selectable ${isLiked ? "selected" : ""}`} onClick={() => toggleLike(t)}>
+      <div
+        className={`track-card${isLiked ? " liked" : ""}`}
+        onClick={() => toggleLike(t)}
+      >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img className="thumb" src={t.cover ?? ""} alt="" />
-        <div className="grow">
-          <div className="ellipsis">{t.title}</div>
-          <div className="muted ellipsis" style={{ fontSize: "0.85rem" }}>
-            {t.artistName}
-            {showOrigin && t.origin === "similar" && " · découverte"}
+        <img className="track-card__cover" src={t.cover ?? ""} alt="" />
+        <div className="track-card__body">
+          <div className="track-card__title">{t.title}</div>
+          <div className="track-card__artist">{t.artistName}</div>
+          <div className="track-card__actions">
+            <span className="track-card__heart">{isLiked ? "❤️" : "🤍"}</span>
+            <div onClick={(e) => e.stopPropagation()}>
+              <AudioPreview preview={t.preview} title={t.title} artist={t.artistName} />
+            </div>
           </div>
-        </div>
-        {/* Stop propagation pour que le click sur play ne toggle pas le like */}
-        <div onClick={(e) => e.stopPropagation()}>
-          <AudioPreview preview={t.preview} title={t.title} artist={t.artistName} />
-        </div>
-        <div style={{ fontSize: "1.3rem", minWidth: 24, textAlign: "center" }}>
-          {isLiked ? "❤️" : "🤍"}
         </div>
       </div>
     );
@@ -305,48 +303,48 @@ export default function TasteCollection({
     <div className="stack">
       <div>
         <h2>Like les sons que tu aimes</h2>
-        <p className="muted">Tape sur un titre pour le liker. ▶ pour écouter l'extrait.</p>
+        <p className="muted">Tape sur une carte pour liker, ▶ pour écouter.</p>
       </div>
 
-      {/* Barre de recherche manuelle */}
       <input
         className="input"
-        placeholder="🔍 Chercher un titre ou artiste précis…"
+        placeholder="🔍 Chercher un titre ou artiste…"
         value={trackQuery}
         onChange={(e) => setTrackQuery(e.target.value)}
       />
 
       {poolError && <div className="error-box">{poolError}</div>}
 
-      {/* Résultats de recherche */}
       {(trackSearching || filteredSearchResults.length > 0) && (
-        <div className="card stack">
+        <div className="stack">
           <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>Résultats de recherche</p>
           {trackSearching && <p className="muted">Recherche…</p>}
-          {filteredSearchResults.map((t) => <TrackRow key={t.id} t={t} />)}
+          <div className="track-grid">
+            {filteredSearchResults.map((t) => <TrackCard key={t.id} t={t} />)}
+          </div>
         </div>
       )}
 
-      {/* Pool suggéré */}
-      <p className="muted" style={{ fontSize: "0.85rem", margin: 0 }}>Suggestions basées sur tes artistes</p>
-      <div className="stack">
-        {visible.map((t) => <TrackRow key={t.id} t={t} showOrigin />)}
+      <p className="muted" style={{ fontSize: "0.85rem", margin: 0 }}>
+        Suggestions · page {Math.floor(batchOffset / BATCH_SIZE) + 1}/{Math.ceil(pool.length / BATCH_SIZE) || 1}
+      </p>
+      <div className="track-grid">
+        {visible.map((t) => <TrackCard key={t.id} t={t} />)}
       </div>
 
       {pool.length > BATCH_SIZE && (
         <div className="row">
           <button
             className="btn secondary"
+            style={{ flex: 1 }}
             onClick={() => setBatchOffset((o) => Math.max(0, o - BATCH_SIZE))}
             disabled={batchOffset === 0}
           >
             ← Précédents
           </button>
-          <span className="muted" style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}>
-            {Math.floor(batchOffset / BATCH_SIZE) + 1} / {Math.ceil(pool.length / BATCH_SIZE)}
-          </span>
           <button
             className="btn secondary"
+            style={{ flex: 1 }}
             onClick={() => setBatchOffset((o) => Math.min(pool.length - BATCH_SIZE, o + BATCH_SIZE))}
             disabled={batchOffset + BATCH_SIZE >= pool.length}
           >
@@ -356,7 +354,7 @@ export default function TasteCollection({
       )}
 
       <button className="btn" onClick={finishTracks} disabled={finishing}>
-        {finishing ? "Enregistrement…" : `J'ai fini (${likedCount} likés)`}
+        {finishing ? "Enregistrement…" : `✅ J'ai fini${likedCount > 0 ? ` · ${likedCount} ❤️` : ""}`}
       </button>
     </div>
   );
