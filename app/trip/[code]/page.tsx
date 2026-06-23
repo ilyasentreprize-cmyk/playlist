@@ -156,9 +156,14 @@ export default function TripPage({ params }: { params: { code: string } }) {
     };
   }, [code, router, refetchParticipants, refetchCandidates, refetchVotes, refetchSession]);
 
+  // Contrôle si l'utilisateur est en train de faire son étape goûts
+  // (depuis le lobby, via le bouton "Choisir mes goûts").
+  const [inTasteFlow, setInTasteFlow] = useState(false);
+
   function markTasteDone() {
     localStorage.setItem(tasteKey(code), "1");
     setTasteDone(true);
+    setInTasteFlow(false);
   }
 
   // --- rendus d'états ---
@@ -201,12 +206,17 @@ export default function TripPage({ params }: { params: { code: string } }) {
 
   if (!identity || !session) return null;
 
-  // Aiguillage de phase.
-  const showTaste = session.status !== "finished" && !tasteDone;
+  // Aiguillage de phase :
+  // - En lobby : tout le monde voit le lobby (QR code + liste). Le bouton
+  //   "Choisir mes goûts" bascule vers TasteCollection puis revient au lobby.
+  // - En voting : si goûts pas faits → TasteCollection (skip possible pour
+  //   retardataires), sinon VoteRoom.
+  // - Finished : FinalPlaylist.
+  const showTasteInVoting = session.status === "voting" && !tasteDone && !inTasteFlow;
 
   return (
     <main className="container">
-      {showTaste ? (
+      {inTasteFlow ? (
         <TasteCollection
           identity={identity}
           allowSkip={session.status === "voting"}
@@ -217,7 +227,15 @@ export default function TripPage({ params }: { params: { code: string } }) {
           code={code}
           identity={identity}
           participants={participants}
+          tasteDone={tasteDone}
+          onStartTaste={() => setInTasteFlow(true)}
           onGenerated={() => sessionIdRef.current && refetchSession(sessionIdRef.current)}
+        />
+      ) : showTasteInVoting ? (
+        <TasteCollection
+          identity={identity}
+          allowSkip
+          onDone={markTasteDone}
         />
       ) : session.status === "voting" ? (
         <VoteRoom
