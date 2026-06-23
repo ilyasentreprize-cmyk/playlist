@@ -15,7 +15,7 @@ export default function FinalPlaylist({
   votes: CandidateVote[];
 }) {
   const [copied, setCopied] = useState(false);
-  const [showSpotify, setShowSpotify] = useState(false);
+  const [copiedExport, setCopiedExport] = useState(false);
 
   const { result, byId } = useMemo(() => {
     const likes = new Map<string, number>();
@@ -48,8 +48,15 @@ export default function FinalPlaylist({
     });
   }
 
-  function spotifySearchUrl(title: string, artist: string) {
-    return `https://open.spotify.com/search/${encodeURIComponent(`${title} ${artist}`)}`;
+  function exportAndOpen(url: string) {
+    const text = result.kept
+      .map((item) => `${item.title} - ${item.artistName}`)
+      .join("\n");
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedExport(true);
+      setTimeout(() => setCopiedExport(false), 4000);
+      window.open(url, "_blank", "noopener,noreferrer");
+    });
   }
 
   return (
@@ -98,53 +105,34 @@ export default function FinalPlaylist({
               {copied ? "✅ Copié !" : "📋 Copier la liste (texte)"}
             </button>
 
-            <button
-              className="btn"
-              onClick={() => setShowSpotify((v) => !v)}
-              style={{ background: "linear-gradient(135deg, #1DB954, #158a3e)" }}
-            >
-              {showSpotify ? "Fermer Spotify" : "🎵 Exporter vers Spotify"}
-            </button>
-          </div>
-
-          {/* Panneau export Spotify */}
-          {showSpotify && (
             <div className="card stack">
-              <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Rechercher sur Spotify</h2>
-              <p className="muted" style={{ fontSize: "0.85rem", margin: 0 }}>
-                Clique sur un morceau pour l'ouvrir dans Spotify et l'ajouter à ta playlist manuellement.
+              <p style={{ margin: 0, fontWeight: 600, fontSize: "0.95rem" }}>Créer la playlist en 2 clics</p>
+              <p className="muted" style={{ fontSize: "0.82rem", margin: 0 }}>
+                Clique sur un service → la liste est copiée automatiquement → colle-la dans le champ texte du site → ta playlist est créée sur Spotify, Deezer ou Apple Music.
               </p>
-              <div className="stack">
-                {result.kept.map((item, idx) => {
-                  const c = byId.get(item.candidateId);
-                  if (!c) return null;
-                  return (
-                    <a
-                      key={item.candidateId}
-                      href={spotifySearchUrl(c.title, c.artist_name)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ textDecoration: "none" }}
-                    >
-                      <div className="list-item selectable">
-                        <div className="badge-rank">{idx + 1}</div>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img className="thumb" src={c.cover ?? ""} alt="" />
-                        <div className="grow">
-                          <div className="ellipsis">{c.title}</div>
-                          <div className="muted ellipsis" style={{ fontSize: "0.85rem" }}>{c.artist_name}</div>
-                        </div>
-                        <span style={{ color: "#1DB954", fontSize: "1.1rem" }}>↗</span>
-                      </div>
-                    </a>
-                  );
-                })}
+              {copiedExport && (
+                <div className="success-box" style={{ fontSize: "0.85rem" }}>
+                  ✅ Liste copiée ! Colle-la dans le champ texte du site qui vient de s'ouvrir.
+                </div>
+              )}
+              <div className="row">
+                <button
+                  className="btn"
+                  style={{ background: "linear-gradient(135deg, #1DB954, #158a3e)", flex: 1 }}
+                  onClick={() => exportAndOpen("https://www.tunemymusic.com/fr/transfer")}
+                >
+                  Spotify / Deezer
+                </button>
+                <button
+                  className="btn secondary"
+                  style={{ flex: 1 }}
+                  onClick={() => exportAndOpen("https://soundiiz.com/standalone/txt-to-spotify")}
+                >
+                  Soundiiz
+                </button>
               </div>
-              <p className="muted" style={{ fontSize: "0.78rem" }}>
-                💡 Astuce : crée une playlist vide sur Spotify, puis clique sur chaque titre et ajoute-le.
-              </p>
             </div>
-          )}
+          </div>
         </>
       )}
 
