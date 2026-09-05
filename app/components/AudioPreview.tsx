@@ -2,15 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import { registerPlay, unregisterPlay } from "@/lib/audioManager";
+import { Play, Pause } from "./Icon";
 
 export default function AudioPreview({
   preview,
   title,
   artist,
+  variant = "list",
 }: {
   preview: string | null;
   title: string;
   artist: string;
+  /** `list` : pastille grise en ligne. `overlay` : pastille translucide sur pochette. */
+  variant?: "list" | "overlay";
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [url, setUrl] = useState<string | null>(preview);
@@ -22,12 +26,12 @@ export default function AudioPreview({
     setUrl(preview);
     setNoPreview(false);
     stop();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preview, title, artist]);
 
   useEffect(() => {
     return () => stop();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function stop() {
@@ -62,12 +66,18 @@ export default function AudioPreview({
       setLoading(true);
       src = await resolveItunes();
       setLoading(false);
-      if (!src) { setNoPreview(true); return; }
+      if (!src) {
+        setNoPreview(true);
+        return;
+      }
       setUrl(src);
     }
 
     const audio = new Audio(src);
-    audio.onended = () => { unregisterPlay(audio); setPlaying(false); };
+    audio.onended = () => {
+      unregisterPlay(audio);
+      setPlaying(false);
+    };
     audio.onpause = () => setPlaying(false);
     audioRef.current = audio;
 
@@ -82,15 +92,26 @@ export default function AudioPreview({
     }
   }
 
+  const size = variant === "overlay" ? 14 : 15;
+
   return (
     <button
-      className="icon-btn"
-      onClick={toggle}
+      className={variant === "overlay" ? "tile__play" : "icon-btn"}
+      onClick={(e) => {
+        e.stopPropagation();
+        toggle();
+      }}
       disabled={noPreview}
-      aria-label={playing ? "Pause" : "Écouter l'extrait"}
-      title={noPreview ? "Aucun extrait disponible" : "Écouter 30s"}
+      aria-label={playing ? "Suspendre l’extrait" : "Écouter l’extrait"}
+      title={noPreview ? "Aucun extrait disponible" : "Écouter 30 secondes"}
     >
-      {loading ? "…" : noPreview ? "🚫" : playing ? "⏸" : "▶"}
+      {loading ? (
+        <span className="spinner" style={{ width: size, height: size }} />
+      ) : playing ? (
+        <Pause size={size} />
+      ) : (
+        <Play size={size} />
+      )}
     </button>
   );
 }

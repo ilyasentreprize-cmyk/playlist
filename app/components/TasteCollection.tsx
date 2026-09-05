@@ -2,6 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import AudioPreview from "./AudioPreview";
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Close,
+  CloseCircle,
+  MusicNote,
+  Plus,
+  Search,
+} from "./Icon";
 import type { ArtistResult, LocalIdentity } from "@/lib/types";
 
 interface PoolTrack {
@@ -29,7 +39,7 @@ export default function TasteCollection({
 }) {
   const [phase, setPhase] = useState<"artists" | "tracks">("artists");
 
-  // ---- Étape 2a : artistes ----
+  // ------------------------ Phase 1 : artistes ------------------------
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ArtistResult[]>([]);
   const [selected, setSelected] = useState<ArtistResult[]>([]);
@@ -37,38 +47,41 @@ export default function TasteCollection({
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Recommandations dynamiques
   const [reco, setReco] = useState<ArtistResult[]>([]);
   const recoDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Charge les recommandations — au mount (rap) puis à chaque changement de sélection
+  // Recommandations : rap au départ, puis artistes proches des choix faits.
   function loadReco(sel: ArtistResult[]) {
     if (recoDebounceRef.current) clearTimeout(recoDebounceRef.current);
     recoDebounceRef.current = setTimeout(async () => {
-      const selectedIds = sel.map((a) => a.id).join(",");
-      const excludeIds = sel.map((a) => a.id).join(",");
+      const ids = sel.map((a) => a.id).join(",");
       const params = new URLSearchParams();
-      if (selectedIds) params.set("selectedIds", selectedIds);
-      if (excludeIds) params.set("exclude", excludeIds);
+      if (ids) {
+        params.set("selectedIds", ids);
+        params.set("exclude", ids);
+      }
       try {
         const res = await fetch(`/api/recommendations/artists?${params}`);
         const data = await res.json();
-        // Filtre côté client aussi pour être sûr
         const selSet = new Set(sel.map((a) => a.id));
         setReco((data.artists ?? []).filter((a: ArtistResult) => !selSet.has(a.id)));
       } catch {
-        /* silencieux : les reco sont un bonus */
+        /* silencieux : les suggestions sont un bonus */
       }
     }, 400);
   }
 
-  // Chargement initial
-  useEffect(() => { loadReco([]); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    loadReco([]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     const q = query.trim();
-    if (q.length < 2) { setResults([]); return; }
+    if (q.length < 2) {
+      setResults([]);
+      return;
+    }
     debounceRef.current = setTimeout(async () => {
       setSearching(true);
       setError(null);
@@ -97,19 +110,25 @@ export default function TasteCollection({
 
   const [submitting, setSubmitting] = useState(false);
   async function submitArtists() {
-    if (selected.length < MIN_ARTISTS) return setError(`Sélectionne au moins ${MIN_ARTISTS} artistes.`);
+    if (selected.length < MIN_ARTISTS)
+      return setError(`Choisis au moins ${MIN_ARTISTS} artistes.`);
     setSubmitting(true);
     setError(null);
     try {
       const res = await fetch("/api/taste/artists", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ participantId: identity.participantId, token: identity.token, artists: selected }),
+        body: JSON.stringify({
+          participantId: identity.participantId,
+          token: identity.token,
+          artists: selected,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Erreur");
       await loadPool();
       setPhase("tracks");
+      window.scrollTo(0, 0);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erreur réseau.");
     } finally {
@@ -117,13 +136,12 @@ export default function TasteCollection({
     }
   }
 
-  // ---- Étape 2b : like de sons ----
+  // -------------------------- Phase 2 : sons --------------------------
   const [pool, setPool] = useState<PoolTrack[]>([]);
   const [batchOffset, setBatchOffset] = useState(0);
   const [liked, setLiked] = useState<Record<string, PoolTrack>>({});
   const [poolError, setPoolError] = useState<string | null>(null);
 
-  // Recherche de morceaux dans l'étape 2b
   const [trackQuery, setTrackQuery] = useState("");
   const [trackResults, setTrackResults] = useState<PoolTrack[]>([]);
   const [trackSearching, setTrackSearching] = useState(false);
@@ -132,17 +150,25 @@ export default function TasteCollection({
   useEffect(() => {
     if (trackDebounceRef.current) clearTimeout(trackDebounceRef.current);
     const q = trackQuery.trim();
-    if (q.length < 2) { setTrackResults([]); return; }
+    if (q.length < 2) {
+      setTrackResults([]);
+      return;
+    }
     trackDebounceRef.current = setTimeout(async () => {
       setTrackSearching(true);
       try {
         const res = await fetch(`/api/search/tracks?q=${encodeURIComponent(q)}`);
         const data = await res.json();
-        const tracks: PoolTrack[] = (data.tracks ?? []).map((t: { id: string; title: string; artistName: string; artistId: string | null; cover: string | null; preview: string | null }) => ({
-          ...t,
-          origin: "selected" as const,
-          sourceArtistId: t.artistId ?? "",
-        }));
+        const tracks: PoolTrack[] = (data.tracks ?? []).map(
+          (t: {
+            id: string;
+            title: string;
+            artistName: string;
+            artistId: string | null;
+            cover: string | null;
+            preview: string | null;
+          }) => ({ ...t, origin: "selected" as const, sourceArtistId: t.artistId ?? "" })
+        );
         setTrackResults(tracks);
       } catch {
         setTrackResults([]);
@@ -155,9 +181,11 @@ export default function TasteCollection({
   async function loadPool() {
     setPoolError(null);
     try {
-      const res = await fetch(`/api/pool?participantId=${identity.participantId}&token=${identity.token}`);
+      const res = await fetch(
+        `/api/pool?participantId=${identity.participantId}&token=${identity.token}`
+      );
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Pool indisponible");
+      if (!res.ok) throw new Error(data.error ?? "Suggestions indisponibles");
       setPool(data.tracks ?? []);
     } catch (e) {
       setPoolError(e instanceof Error ? e.message : "Erreur réseau.");
@@ -178,16 +206,28 @@ export default function TasteCollection({
     setFinishing(true);
     try {
       const likedTracks = Object.values(liked).map((t) => ({
-        id: t.id, title: t.title, artistName: t.artistName,
-        artistId: t.artistId, cover: t.cover, preview: t.preview,
-        origin: t.origin, sourceArtistId: t.sourceArtistId,
+        id: t.id,
+        title: t.title,
+        artistName: t.artistName,
+        artistId: t.artistId,
+        cover: t.cover,
+        preview: t.preview,
+        origin: t.origin,
+        sourceArtistId: t.sourceArtistId,
       }));
       const res = await fetch("/api/taste/tracks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ participantId: identity.participantId, token: identity.token, likedTracks }),
+        body: JSON.stringify({
+          participantId: identity.participantId,
+          token: identity.token,
+          likedTracks,
+        }),
       });
-      if (!res.ok) { const data = await res.json(); throw new Error(data.error ?? "Erreur"); }
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error ?? "Erreur");
+      }
       onDone();
     } catch (e) {
       setPoolError(e instanceof Error ? e.message : "Erreur réseau.");
@@ -195,167 +235,327 @@ export default function TasteCollection({
     }
   }
 
-  // ============================ Rendu ============================
+  // ============================== Rendu ==============================
 
   if (phase === "artists") {
+    const searchingActive = query.trim().length >= 2;
+
     return (
-      <div className="stack">
-        <div>
-          <h2>Tes artistes préférés</h2>
-          <p className="muted">Choisis-en au moins {MIN_ARTISTS}. Ça nous donne le signal de départ.</p>
-        </div>
-
-        {allowSkip && (
-          <button className="btn ghost" onClick={onDone}>Passer et voter directement →</button>
-        )}
-
-        <input
-          className="input"
-          placeholder="Rechercher un artiste…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          autoFocus
-        />
-
-        {error && <div className="error-box">{error}</div>}
-
-        {selected.length > 0 && (
-          <div className="row" style={{ flexWrap: "wrap" }}>
-            {selected.map((a) => (
-              <span className="pill" key={a.id} onClick={() => toggleArtist(a)}>{a.name} ✕</span>
-            ))}
+      <div>
+        <nav className="nav">
+          <div className="nav__side" />
+          <span className="nav__title">Artistes</span>
+          <div className="nav__side nav__side--right">
+            {allowSkip && (
+              <button className="nav-btn" onClick={onDone}>
+                Passer
+              </button>
+            )}
           </div>
-        )}
+        </nav>
 
-        {/* Recommandations dynamiques */}
-        {reco.length > 0 && query.trim().length < 2 && (
-          <div className="stack">
-            <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
-              {selected.length === 0 ? "🎤 Suggestions rap" : "🎯 Artistes similaires à tes choix"}
+        <div className="stack-lg" style={{ paddingTop: 12 }}>
+          <div className="stack-sm">
+            <h1 className="title-lg">Tes artistes</h1>
+            <p className="subhead secondary">
+              Choisis-en au moins {MIN_ARTISTS}. Ils servent de point de départ pour
+              les suggestions du groupe.
             </p>
-            {reco.map((a) => (
-              <div key={a.id} className="list-item selectable" onClick={() => toggleArtist(a)}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img className="thumb" src={a.picture ?? ""} alt="" />
-                <div className="grow ellipsis">{a.name}</div>
-                <div>+</div>
-              </div>
-            ))}
           </div>
-        )}
 
-        {/* Résultats de recherche */}
-        <div className="stack">
-          {searching && <p className="muted">Recherche…</p>}
-          {results.map((a) => {
-            const isSel = selected.some((x) => x.id === a.id);
-            return (
-              <div key={a.id} className={`list-item selectable ${isSel ? "selected" : ""}`} onClick={() => toggleArtist(a)}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img className="thumb" src={a.picture ?? ""} alt="" />
-                <div className="grow ellipsis">{a.name}</div>
-                <div>{isSel ? "✓" : "+"}</div>
+          <div className="search">
+            <span className="search__icon">
+              <Search size={17} />
+            </span>
+            <input
+              className="search__input"
+              placeholder="Rechercher un artiste"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              autoComplete="off"
+            />
+            {query && (
+              <button
+                className="search__clear"
+                onClick={() => setQuery("")}
+                aria-label="Effacer"
+              >
+                <CloseCircle size={17} />
+              </button>
+            )}
+          </div>
+
+          {error && <div className="notice notice--error">{error}</div>}
+
+          {selected.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {selected.map((a) => (
+                <button className="chip" key={a.id} onClick={() => toggleArtist(a)}>
+                  {a.name}
+                  <span className="chip__x">
+                    <Close size={13} />
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Suggestions, masquées pendant une recherche */}
+          {!searchingActive && reco.length > 0 && (
+            <div className="stack-sm">
+              <p className="section-header">
+                {selected.length === 0 ? "Suggestions" : "Dans le même esprit"}
+              </p>
+              <div className="group">
+                {reco.map((a) => (
+                  <ArtistRow key={a.id} artist={a} selected={false} onToggle={toggleArtist} />
+                ))}
               </div>
-            );
-          })}
+            </div>
+          )}
+
+          {/* Résultats de recherche */}
+          {searchingActive && (
+            <div className="stack-sm">
+              <p className="section-header">Résultats</p>
+              {searching && results.length === 0 ? (
+                <div className="empty">
+                  <span className="spinner" />
+                </div>
+              ) : results.length === 0 ? (
+                <div className="empty">
+                  <p className="subhead">Aucun artiste trouvé</p>
+                </div>
+              ) : (
+                <div className="group">
+                  {results.map((a) => (
+                    <ArtistRow
+                      key={a.id}
+                      artist={a}
+                      selected={selected.some((x) => x.id === a.id)}
+                      onToggle={toggleArtist}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        <div className="row" style={{ position: "sticky", bottom: 0, paddingTop: 8 }}>
-          <button className="btn" onClick={submitArtists} disabled={submitting}>
-            {submitting ? "Chargement…" : `Continuer (${selected.length}/${MIN_ARTISTS})`}
+        <div className="footer-actions">
+          <button
+            className="btn"
+            onClick={submitArtists}
+            disabled={submitting || selected.length < MIN_ARTISTS}
+          >
+            {submitting
+              ? "Chargement…"
+              : selected.length < MIN_ARTISTS
+              ? `Continuer · ${selected.length}/${MIN_ARTISTS}`
+              : "Continuer"}
           </button>
         </div>
       </div>
     );
   }
 
-  // phase === "tracks"
+  // ------------------------------ Sons ------------------------------
   const visible = pool.slice(batchOffset, batchOffset + BATCH_SIZE);
   const likedCount = Object.keys(liked).length;
+  const page = Math.floor(batchOffset / BATCH_SIZE) + 1;
+  const pageCount = Math.max(1, Math.ceil(pool.length / BATCH_SIZE));
 
   const poolIds = new Set(pool.map((t) => t.id));
-  const filteredSearchResults = trackResults.filter((t) => !poolIds.has(t.id));
+  const searchHits = trackResults.filter((t) => !poolIds.has(t.id));
+  const searchingTracks = trackQuery.trim().length >= 2;
 
-  function TrackCard({ t }: { t: PoolTrack }) {
-    const isLiked = !!liked[t.id];
+  function Tile({ t }: { t: PoolTrack }) {
+    const on = !!liked[t.id];
     return (
       <div
-        className={`track-card${isLiked ? " liked" : ""}`}
+        className={`tile${on ? " tile--on" : ""}`}
         onClick={() => toggleLike(t)}
+        role="button"
+        tabIndex={0}
+        aria-pressed={on}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            toggleLike(t);
+          }
+        }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img className="track-card__cover" src={t.cover ?? ""} alt="" />
-        <div className="track-card__body">
-          <div className="track-card__title">{t.title}</div>
-          <div className="track-card__artist">{t.artistName}</div>
-          <div className="track-card__actions">
-            <span className="track-card__heart">{isLiked ? "❤️" : "🤍"}</span>
-            <div onClick={(e) => e.stopPropagation()}>
-              <AudioPreview preview={t.preview} title={t.title} artist={t.artistName} />
-            </div>
-          </div>
+        <div className="tile__art">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={t.cover ?? ""} alt="" />
+          <span className="tile__check">
+            <Check size={14} />
+          </span>
+          <AudioPreview
+            preview={t.preview}
+            title={t.title}
+            artist={t.artistName}
+            variant="overlay"
+          />
+        </div>
+        <div>
+          <div className="tile__title truncate">{t.title}</div>
+          <div className="tile__artist truncate">{t.artistName}</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="stack">
-      <div>
-        <h2>Like les sons que tu aimes</h2>
-        <p className="muted">Tape sur une carte pour liker, ▶ pour écouter.</p>
-      </div>
+    <div>
+      <nav className="nav">
+        <div className="nav__side">
+          <button className="nav-btn" onClick={() => setPhase("artists")}>
+            <ChevronLeft size={22} />
+            Artistes
+          </button>
+        </div>
+        <span className="nav__title">Sons</span>
+        <div className="nav__side nav__side--right" />
+      </nav>
 
-      <input
-        className="input"
-        placeholder="🔍 Chercher un titre ou artiste…"
-        value={trackQuery}
-        onChange={(e) => setTrackQuery(e.target.value)}
-      />
+      <div className="stack-lg" style={{ paddingTop: 12 }}>
+        <div className="stack-sm">
+          <h1 className="title-lg">Tes sons</h1>
+          <p className="subhead secondary">
+            Touche une pochette pour la retenir. Le bouton lecture fait écouter
+            trente secondes.
+          </p>
+        </div>
 
-      {poolError && <div className="error-box">{poolError}</div>}
+        <div className="search">
+          <span className="search__icon">
+            <Search size={17} />
+          </span>
+          <input
+            className="search__input"
+            placeholder="Rechercher un titre"
+            value={trackQuery}
+            onChange={(e) => setTrackQuery(e.target.value)}
+            autoComplete="off"
+          />
+          {trackQuery && (
+            <button
+              className="search__clear"
+              onClick={() => setTrackQuery("")}
+              aria-label="Effacer"
+            >
+              <CloseCircle size={17} />
+            </button>
+          )}
+        </div>
 
-      {(trackSearching || filteredSearchResults.length > 0) && (
-        <div className="stack">
-          <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>Résultats de recherche</p>
-          {trackSearching && <p className="muted">Recherche…</p>}
-          <div className="track-grid">
-            {filteredSearchResults.map((t) => <TrackCard key={t.id} t={t} />)}
+        {poolError && <div className="notice notice--error">{poolError}</div>}
+
+        {searchingTracks && (
+          <div className="stack-sm">
+            <p className="section-header section-header--flush">Résultats</p>
+            {trackSearching && searchHits.length === 0 ? (
+              <div className="empty">
+                <span className="spinner" />
+              </div>
+            ) : searchHits.length === 0 ? (
+              <div className="empty">
+                <p className="subhead">Aucun titre trouvé</p>
+              </div>
+            ) : (
+              <div className="grid">
+                {searchHits.map((t) => (
+                  <Tile key={t.id} t={t} />
+                ))}
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        )}
 
-      <p className="muted" style={{ fontSize: "0.85rem", margin: 0 }}>
-        Suggestions · page {Math.floor(batchOffset / BATCH_SIZE) + 1}/{Math.ceil(pool.length / BATCH_SIZE) || 1}
-      </p>
-      <div className="track-grid">
-        {visible.map((t) => <TrackCard key={t.id} t={t} />)}
+        <div className="stack-sm">
+          <p className="section-header section-header--flush">Suggestions</p>
+          {pool.length === 0 ? (
+            <div className="empty">
+              <span className="empty__icon">
+                <MusicNote size={30} />
+              </span>
+              <p className="subhead">Aucune suggestion pour l’instant</p>
+            </div>
+          ) : (
+            <div className="grid">
+              {visible.map((t) => (
+                <Tile key={t.id} t={t} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {pool.length > BATCH_SIZE && (
+          <div
+            className="hstack"
+            style={{ justifyContent: "space-between", padding: "0 4px" }}
+          >
+            <button
+              className="icon-btn"
+              onClick={() => setBatchOffset((o) => Math.max(0, o - BATCH_SIZE))}
+              disabled={batchOffset === 0}
+              aria-label="Suggestions précédentes"
+            >
+              <ChevronLeft size={17} />
+            </button>
+            <span className="footnote secondary tabular">
+              {page} sur {pageCount}
+            </span>
+            <button
+              className="icon-btn"
+              onClick={() =>
+                setBatchOffset((o) => Math.min(pool.length - BATCH_SIZE, o + BATCH_SIZE))
+              }
+              disabled={batchOffset + BATCH_SIZE >= pool.length}
+              aria-label="Suggestions suivantes"
+            >
+              <ChevronRight size={17} />
+            </button>
+          </div>
+        )}
       </div>
 
-      {pool.length > BATCH_SIZE && (
-        <div className="row">
-          <button
-            className="btn secondary"
-            style={{ flex: 1 }}
-            onClick={() => setBatchOffset((o) => Math.max(0, o - BATCH_SIZE))}
-            disabled={batchOffset === 0}
-          >
-            ← Précédents
-          </button>
-          <button
-            className="btn secondary"
-            style={{ flex: 1 }}
-            onClick={() => setBatchOffset((o) => Math.min(pool.length - BATCH_SIZE, o + BATCH_SIZE))}
-            disabled={batchOffset + BATCH_SIZE >= pool.length}
-          >
-            Suivants →
-          </button>
-        </div>
-      )}
-
-      <button className="btn" onClick={finishTracks} disabled={finishing}>
-        {finishing ? "Enregistrement…" : `✅ J'ai fini${likedCount > 0 ? ` · ${likedCount} ❤️` : ""}`}
-      </button>
+      <div className="footer-actions">
+        <button className="btn" onClick={finishTracks} disabled={finishing}>
+          {finishing
+            ? "Enregistrement…"
+            : likedCount === 0
+            ? "Terminer"
+            : `Terminer · ${likedCount} son${likedCount > 1 ? "s" : ""}`}
+        </button>
+      </div>
     </div>
+  );
+}
+
+// Ligne d'artiste : pochette ronde, nom, état de sélection à droite.
+function ArtistRow({
+  artist,
+  selected,
+  onToggle,
+}: {
+  artist: ArtistResult;
+  selected: boolean;
+  onToggle: (a: ArtistResult) => void;
+}) {
+  return (
+    <button
+      className="row row--tappable row--full"
+      onClick={() => onToggle(artist)}
+      aria-pressed={selected}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className="artwork artwork--sm artwork--circle" src={artist.picture ?? ""} alt="" />
+      <span className="grow truncate">{artist.name}</span>
+      <span className={selected ? "tint" : "tertiary"} style={{ display: "flex" }}>
+        {selected ? <Check size={20} /> : <Plus size={20} />}
+      </span>
+    </button>
   );
 }

@@ -169,18 +169,26 @@ export default function TripPage({ params }: { params: { code: string } }) {
   // --- rendus d'états ---
   if (screen === "loading") {
     return (
-      <main className="container center">
-        <p className="muted" style={{ marginTop: 60 }}>Chargement du trajet…</p>
+      <main className="screen">
+        <div className="empty" style={{ paddingTop: 120 }}>
+          <span className="spinner" />
+          <p className="subhead secondary">Chargement du trajet…</p>
+        </div>
       </main>
     );
   }
 
   if (screen === "config-error") {
     return (
-      <main className="container">
-        <div className="error-box" style={{ marginTop: 40 }}>
-          Configuration Supabase manquante. Renseigne NEXT_PUBLIC_SUPABASE_URL et
-          NEXT_PUBLIC_SUPABASE_ANON_KEY dans <code>.env.local</code>.
+      <main className="screen">
+        <div className="stack-lg" style={{ marginTop: 80 }}>
+          <div className="stack-sm">
+            <h1 className="title-lg">Configuration manquante</h1>
+            <p className="body secondary">
+              Renseigne NEXT_PUBLIC_SUPABASE_URL et NEXT_PUBLIC_SUPABASE_ANON_KEY
+              dans les variables d’environnement.
+            </p>
+          </div>
         </div>
       </main>
     );
@@ -188,14 +196,18 @@ export default function TripPage({ params }: { params: { code: string } }) {
 
   if (screen === "invalid" || screen === "expired") {
     return (
-      <main className="container">
-        <div className="card stack" style={{ marginTop: 40 }}>
-          <h2>{screen === "expired" ? "Trajet expiré" : "Trajet introuvable"}</h2>
-          <p className="muted">
-            {screen === "expired"
-              ? "Ce trajet n’est plus actif (expiration après 24h)."
-              : "Ce code ne correspond à aucun trajet actif."}
-          </p>
+      <main className="screen">
+        <div className="stack-lg" style={{ marginTop: 80 }}>
+          <div className="stack-sm">
+            <h1 className="title-lg">
+              {screen === "expired" ? "Trajet expiré" : "Trajet introuvable"}
+            </h1>
+            <p className="body secondary">
+              {screen === "expired"
+                ? "Ce trajet n’est plus actif. Les trajets se ferment automatiquement après 24 heures."
+                : "Ce code ne correspond à aucun trajet actif."}
+            </p>
+          </div>
           <button className="btn" onClick={() => router.push("/")}>
             Retour à l’accueil
           </button>
@@ -215,7 +227,7 @@ export default function TripPage({ params }: { params: { code: string } }) {
   const showTasteInVoting = session.status === "voting" && !tasteDone && !inTasteFlow;
 
   return (
-    <main className="container">
+    <main className="screen">
       {inTasteFlow ? (
         <TasteCollection
           identity={identity}

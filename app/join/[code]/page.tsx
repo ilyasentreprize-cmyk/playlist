@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { loadIdentity, saveIdentity } from "@/lib/identity";
 
-// Étape 2 (entrée) : on arrive ici via le QR code ou le code saisi.
-// Si on a déjà une identité pour ce trajet -> on file vers la salle.
-// Sinon : on valide le code, on demande un pseudo, on rejoint.
+// On arrive ici via le QR code ou le code saisi.
+// Identité déjà connue pour ce trajet -> on file vers la salle.
+// Sinon : on valide le code, on demande un prénom, on rejoint.
 export default function JoinPage({ params }: { params: { code: string } }) {
   const router = useRouter();
   const code = params.code.toUpperCase();
@@ -19,12 +19,10 @@ export default function JoinPage({ params }: { params: { code: string } }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Déjà membre de ce trajet ?
     if (loadIdentity(code)) {
       router.replace(`/trip/${code}`);
       return;
     }
-    // Sinon on vérifie que le trajet existe.
     (async () => {
       try {
         const res = await fetch(`/api/sessions/${code}`);
@@ -60,22 +58,29 @@ export default function JoinPage({ params }: { params: { code: string } }) {
 
   if (status === "checking") {
     return (
-      <main className="container center">
-        <p className="muted" style={{ marginTop: 60 }}>Vérification du trajet…</p>
+      <main className="screen">
+        <div className="empty" style={{ paddingTop: 120 }}>
+          <span className="spinner" />
+          <p className="subhead secondary">Vérification du trajet…</p>
+        </div>
       </main>
     );
   }
 
   if (status === "invalid" || status === "expired") {
     return (
-      <main className="container">
-        <div className="card stack" style={{ marginTop: 40 }}>
-          <h2>{status === "expired" ? "Trajet expiré" : "Trajet introuvable"}</h2>
-          <p className="muted">
-            {status === "expired"
-              ? "Ce trajet n’est plus actif (les trajets expirent après 24h)."
-              : "Ce code ne correspond à aucun trajet. Vérifie-le ou crées-en un nouveau."}
-          </p>
+      <main className="screen">
+        <div className="stack-lg" style={{ marginTop: 80 }}>
+          <div className="stack-sm">
+            <h1 className="title-lg">
+              {status === "expired" ? "Trajet expiré" : "Trajet introuvable"}
+            </h1>
+            <p className="body secondary">
+              {status === "expired"
+                ? "Ce trajet n’est plus actif. Les trajets se ferment automatiquement après 24 heures."
+                : `Aucun trajet ne correspond au code ${code}. Vérifie-le, ou crée un nouveau trajet.`}
+            </p>
+          </div>
           <button className="btn" onClick={() => router.push("/")}>
             Retour à l’accueil
           </button>
@@ -85,21 +90,29 @@ export default function JoinPage({ params }: { params: { code: string } }) {
   }
 
   return (
-    <main className="container">
-      <div className="card stack" style={{ marginTop: 40 }}>
-        <h2>Rejoindre le trajet {code}</h2>
-        <p className="muted">Choisis un prénom pour que le groupe te reconnaisse.</p>
-        {error && <div className="error-box">{error}</div>}
+    <main className="screen">
+      <div className="stack-lg" style={{ marginTop: 80 }}>
+        <div className="stack-sm">
+          <h1 className="title-lg">Rejoindre le trajet</h1>
+          <p className="body secondary">
+            Choisis un prénom pour que le groupe te reconnaisse.
+          </p>
+        </div>
+
+        {error && <div className="notice notice--error">{error}</div>}
+
         <input
-          className="input"
+          className="field"
           placeholder="Ton prénom"
           value={name}
           maxLength={20}
+          autoComplete="given-name"
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && join()}
           autoFocus
         />
-        <button className="btn" onClick={join} disabled={loading}>
+
+        <button className="btn" onClick={join} disabled={loading || !name.trim()}>
           {loading ? "Connexion…" : "Rejoindre"}
         </button>
       </div>

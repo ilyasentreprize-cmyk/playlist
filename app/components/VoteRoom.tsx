@@ -2,11 +2,9 @@
 
 import { useMemo, useState } from "react";
 import AudioPreview from "./AudioPreview";
-import TrackSearchAdd from "./TrackSearchAdd";
+import { Check, Close, Heart } from "./Icon";
 import type { Candidate, CandidateVote, LocalIdentity, Participant } from "@/lib/types";
 
-// Étape 5 : validation par swipe. Un morceau à la fois, like (+1) / dislike (-1).
-// Étape 4 (ajout manuel) accessible via un panneau. Progression temps réel.
 export default function VoteRoom({
   code,
   identity,
@@ -22,13 +20,10 @@ export default function VoteRoom({
   votes: CandidateVote[];
   onFinalized: () => void;
 }) {
-  const [showAdd, setShowAdd] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
 
-  // Set des candidats déjà votés par moi.
   const myVoted = useMemo(() => {
     const s = new Set<string>();
     for (const v of votes) {
@@ -37,18 +32,17 @@ export default function VoteRoom({
     return s;
   }, [votes, identity.participantId]);
 
-  // File des candidats restant à voter (ordre stable d'arrivée).
   const queue = useMemo(
     () => candidates.filter((c) => !myVoted.has(c.id)),
     [candidates, myVoted]
   );
   const current = queue[0];
 
-  const nameById = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const p of participants) m.set(p.id, p.name);
+  const votesByParticipant = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const v of votes) m.set(v.participant_id, (m.get(v.participant_id) ?? 0) + 1);
     return m;
-  }, [participants]);
+  }, [votes]);
 
   async function vote(value: 1 | -1) {
     if (!current || busy) return;
@@ -69,7 +63,6 @@ export default function VoteRoom({
         const data = await res.json();
         throw new Error(data.error ?? "Erreur");
       }
-      // L'avancement réel vient du Realtime (votes) ; rien à faire de plus ici.
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erreur réseau.");
     } finally {
@@ -101,113 +94,131 @@ export default function VoteRoom({
     }
   }
 
-  // Progression par participant : nb de votes / nb de candidats.
   const total = candidates.length;
-  const votesByParticipant = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const v of votes) m.set(v.participant_id, (m.get(v.participant_id) ?? 0) + 1);
-    return m;
-  }, [votes]);
-
-  function notify(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2500);
-  }
+  const done = Math.min(myVoted.size, total);
+  const pct = total === 0 ? 0 : Math.round((done / total) * 100);
 
   return (
-    <div className="stack">
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <h2 style={{ margin: 0 }}>Validation</h2>
-        <span className="pill">{code}</span>
-      </div>
-
-      {toast && <div className="success-box">{toast}</div>}
-      {error && <div className="error-box">{error}</div>}
-
-      {/* Carte de swipe ou état "fini" */}
-      {current ? (
-        <div className="swipe-card">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className="swipe-cover" src={current.cover ?? ""} alt="" />
-          <h2 style={{ marginTop: 16, marginBottom: 2 }}>{current.title}</h2>
-          <p className="muted" style={{ margin: 0 }}>{current.artist_name}</p>
-
-          <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}>
-            <AudioPreview
-              preview={current.preview}
-              title={current.title}
-              artist={current.artist_name}
-            />
-          </div>
-
-          {current.source === "manual" && current.added_by && (
-            <p className="muted" style={{ fontSize: "0.8rem", marginTop: 10 }}>
-              proposé par {nameById.get(current.added_by) ?? "un passager"}
-            </p>
-          )}
-
-          <div className="vote-row">
-            <button className="vote-btn dislike" onClick={() => vote(-1)} disabled={busy}>
-              👎
-            </button>
-            <button className="vote-btn like" onClick={() => vote(1)} disabled={busy}>
-              👍
-            </button>
-          </div>
-          <p className="muted" style={{ marginTop: 14, fontSize: "0.85rem" }}>
-            {queue.length} morceau{queue.length > 1 ? "x" : ""} restant
-            {queue.length > 1 ? "s" : ""}
-          </p>
+    <div>
+      <nav className="nav">
+        <div className="nav__side" />
+        <span className="nav__title">Vote</span>
+        <div className="nav__side nav__side--right">
+          <span className="badge" style={{ marginRight: 8 }}>{code}</span>
         </div>
-      ) : (
-        <div className="card center stack">
-          <div style={{ fontSize: 40 }}>✅</div>
-          <h2 style={{ margin: 0 }}>Tu as tout voté</h2>
-          <p className="muted">
-            {total === 0
-              ? "Aucun morceau pour l’instant — ajoute-en un ci-dessous."
-              : "En attente des autres passagers…"}
-          </p>
+      </nav>
+
+      <div className="stack-lg" style={{ paddingTop: 12 }}>
+        {/* Progression personnelle */}
+        <div className="stack-sm">
+          <div className="hstack" style={{ justifyContent: "space-between" }}>
+            <span className="footnote secondary">Ta progression</span>
+            <span className="footnote secondary tabular">
+              {done} sur {total}
+            </span>
+          </div>
+          <div className="progress">
+            <div className="progress__fill" style={{ width: `${pct}%` }} />
+          </div>
         </div>
-      )}
 
-      {/* Ajout manuel (étape 4) */}
-      <button className="btn secondary" onClick={() => setShowAdd((v) => !v)}>
-        {showAdd ? "Fermer la recherche" : "➕ Ajouter un morceau"}
-      </button>
-      {showAdd && <TrackSearchAdd code={code} identity={identity} onAdded={notify} />}
+        {error && <div className="notice notice--error">{error}</div>}
 
-      {/* Progression temps réel */}
-      <div className="card stack">
-        <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Avancement</h2>
-        {participants.map((p) => {
-          const done = Math.min(votesByParticipant.get(p.id) ?? 0, total);
-          const pct = total === 0 ? 0 : Math.round((done / total) * 100);
-          return (
-            <div key={p.id} className="stack" style={{ gap: 6 }}>
-              <div className="row" style={{ justifyContent: "space-between" }}>
-                <span className="ellipsis">
-                  {p.name}
-                  {p.id === identity.participantId && " (toi)"}
-                </span>
-                <span className="muted" style={{ fontSize: "0.85rem" }}>
-                  {done}/{total}
-                </span>
-              </div>
-              <div className="progress-track">
-                <div className="progress-fill" style={{ width: `${pct}%` }} />
+        {current ? (
+          <div className="stack-lg">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className="vote-art" src={current.cover ?? ""} alt="" />
+
+            <div className="stack-sm center">
+              <h1 className="title">{current.title}</h1>
+              <p className="body secondary">{current.artist_name}</p>
+              <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
+                <AudioPreview
+                  preview={current.preview}
+                  title={current.title}
+                  artist={current.artist_name}
+                />
               </div>
             </div>
-          );
-        })}
-      </div>
 
-      {/* Clôture — créateur uniquement */}
-      {identity.isCreator && (
-        <button className="btn" onClick={finalize} disabled={finalizing}>
-          {finalizing ? "Clôture…" : "🏁 Terminer le vote et voir la playlist"}
-        </button>
-      )}
+            <div className="vote-actions">
+              <button
+                className="vote-btn vote-btn--no"
+                onClick={() => vote(-1)}
+                disabled={busy}
+                aria-label="Refuser"
+              >
+                <Close size={26} />
+              </button>
+              <button
+                className="vote-btn vote-btn--yes"
+                onClick={() => vote(1)}
+                disabled={busy}
+                aria-label="Accepter"
+              >
+                <Heart size={24} filled />
+              </button>
+            </div>
+
+            <p className="footnote secondary center">
+              {queue.length} morceau{queue.length > 1 ? "x" : ""} restant
+              {queue.length > 1 ? "s" : ""}
+            </p>
+          </div>
+        ) : (
+          <div className="empty" style={{ padding: "40px 24px" }}>
+            <span className="tint" style={{ display: "flex" }}>
+              <Check size={40} />
+            </span>
+            <h2 className="title" style={{ color: "var(--label)" }}>
+              Tu as tout voté
+            </h2>
+            <p className="subhead">En attente des autres passagers.</p>
+          </div>
+        )}
+
+        {/* Progression du groupe */}
+        <div className="stack-sm">
+          <p className="section-header">Le groupe</p>
+          <div className="group">
+            {participants.map((p) => {
+              const n = Math.min(votesByParticipant.get(p.id) ?? 0, total);
+              const complete = total > 0 && n >= total;
+              return (
+                <div className="row" key={p.id}>
+                  <div className="avatar">{p.name.charAt(0).toUpperCase()}</div>
+                  <span className="grow truncate">
+                    {p.name}
+                    {p.id === identity.participantId && (
+                      <span className="secondary"> · toi</span>
+                    )}
+                  </span>
+                  {complete ? (
+                    <span className="tint" style={{ display: "flex" }}>
+                      <Check size={18} />
+                    </span>
+                  ) : (
+                    <span className="footnote secondary tabular">
+                      {n}/{total}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {identity.isCreator && (
+          <div className="stack-sm">
+            <button className="btn" onClick={finalize} disabled={finalizing}>
+              {finalizing ? "Clôture…" : "Clôturer et voir la playlist"}
+            </button>
+            <p className="footnote secondary center">
+              Le vote se ferme pour tout le monde.
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

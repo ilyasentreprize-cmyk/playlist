@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import QRCode from "./QRCode";
+import { Check, ChevronRight, Copy, Share } from "./Icon";
 import type { LocalIdentity, Participant } from "@/lib/types";
 
 export default function Lobby({
@@ -20,12 +21,14 @@ export default function Lobby({
   onGenerated: () => void;
 }) {
   const [joinUrl, setJoinUrl] = useState("");
+  const [canShare, setCanShare] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     setJoinUrl(`${window.location.origin}/join/${code}`);
+    setCanShare(typeof navigator !== "undefined" && !!navigator.share);
   }, [code]);
 
   async function generate() {
@@ -50,7 +53,15 @@ export default function Lobby({
     }
   }
 
-  function copyLink() {
+  async function shareLink() {
+    if (canShare) {
+      try {
+        await navigator.share({ title: "Rejoins le trajet", text: `Code ${code}`, url: joinUrl });
+        return;
+      } catch {
+        /* partage annulé : on retombe sur la copie */
+      }
+    }
     navigator.clipboard.writeText(joinUrl).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -58,77 +69,92 @@ export default function Lobby({
   }
 
   return (
-    <div className="stack">
-      {/* En-tête */}
-      <div className="center">
-        <p className="muted" style={{ margin: 0 }}>Code du trajet</p>
-        <div className="code-badge">{code}</div>
+    <div className="stack-lg" style={{ paddingTop: 12 }}>
+      {/* Code et QR */}
+      <div className="stack" style={{ alignItems: "center", gap: 16 }}>
+        <div className="stack-sm center">
+          <p className="footnote secondary">Code du trajet</p>
+          <p className="code">{code}</p>
+        </div>
+
+        {joinUrl && <QRCode value={joinUrl} size={196} />}
+
+        <p className="footnote secondary center" style={{ maxWidth: 260 }}>
+          Fais scanner ce code aux passagers, ou envoie-leur le lien.
+        </p>
+
+        <button className="btn btn--plain" onClick={shareLink} style={{ width: "auto" }}>
+          {copied ? <Check size={18} /> : canShare ? <Share size={18} /> : <Copy size={18} />}
+          {copied ? "Lien copié" : canShare ? "Partager le lien" : "Copier le lien"}
+        </button>
       </div>
 
-      {/* QR code */}
-      {joinUrl && (
-        <div className="card center stack">
-          <p className="muted" style={{ margin: 0, fontSize: "0.9rem" }}>
-            Fais scanner ce QR code aux passagers
-          </p>
-          <div style={{ display: "flex", justifyContent: "center" }}>
-            <QRCode value={joinUrl} size={220} />
-          </div>
-          <button className="btn ghost" onClick={copyLink} style={{ fontSize: "0.85rem" }}>
-            {copied ? "✅ Lien copié !" : "📋 Copier le lien"}
-          </button>
-        </div>
-      )}
-
-      {/* Participants en temps réel */}
-      <div className="card stack">
-        <h2 style={{ margin: 0 }}>
-          Passagers ({participants.length})
-        </h2>
-        {participants.map((p) => (
-          <div className="list-item" key={p.id}>
-            <div className="badge-rank">{p.name.charAt(0).toUpperCase()}</div>
-            <div className="grow ellipsis">
-              {p.name}
-              {p.id === identity.participantId && " (toi)"}
+      {/* Passagers */}
+      <div className="stack-sm">
+        <p className="section-header">
+          Passagers · {participants.length}
+        </p>
+        <div className="group">
+          {participants.map((p) => (
+            <div className="row" key={p.id}>
+              <div className="avatar">{p.name.charAt(0).toUpperCase()}</div>
+              <span className="grow truncate">
+                {p.name}
+                {p.id === identity.participantId && (
+                  <span className="secondary"> · toi</span>
+                )}
+              </span>
+              {p.is_creator && <span className="badge">Hôte</span>}
             </div>
-            {p.is_creator && <span className="pill">hôte</span>}
-          </div>
-        ))}
+          ))}
+        </div>
         {participants.length === 1 && (
-          <p className="muted" style={{ fontSize: "0.85rem", margin: 0 }}>
-            En attente des autres passagers…
+          <p className="footnote secondary" style={{ marginLeft: 16 }}>
+            En attente des autres passagers.
           </p>
         )}
       </div>
 
-      {/* Bouton choisir ses goûts */}
-      {!tasteDone && (
-        <button className="btn" onClick={onStartTaste}>
-          🎵 Choisir mes goûts musicaux →
-        </button>
-      )}
-      {tasteDone && (
-        <div className="success-box center">
-          ✅ Tes goûts sont enregistrés
+      {/* Goûts musicaux */}
+      <div className="stack-sm">
+        <p className="section-header">Ta sélection</p>
+        <div className="group">
+          {tasteDone ? (
+            <div className="row">
+              <span className="tint" style={{ display: "flex" }}>
+                <Check size={20} />
+              </span>
+              <span className="grow">Goûts enregistrés</span>
+              <button className="btn btn--plain" style={{ width: "auto", minHeight: 0, padding: 0 }} onClick={onStartTaste}>
+                Modifier
+              </button>
+            </div>
+          ) : (
+            <button className="row row--tappable" onClick={onStartTaste}>
+              <span className="grow">Choisir mes artistes et mes sons</span>
+              <span className="tertiary" style={{ display: "flex" }}>
+                <ChevronRight size={18} />
+              </span>
+            </button>
+          )}
         </div>
-      )}
+      </div>
 
-      {error && <div className="error-box">{error}</div>}
+      {error && <div className="notice notice--error">{error}</div>}
 
-      {/* Génération — créateur uniquement */}
+      {/* Lancement */}
       {identity.isCreator ? (
-        <div className="stack">
-          <p className="muted center" style={{ fontSize: "0.85rem" }}>
-            Quand tout le monde a rejoint et choisi ses goûts, lance la sélection.
-          </p>
+        <div className="stack-sm">
           <button className="btn" onClick={generate} disabled={generating}>
-            {generating ? "Génération…" : "🎶 Lancer la sélection"}
+            {generating ? "Génération…" : "Lancer la sélection"}
           </button>
+          <p className="footnote secondary center">
+            À lancer quand tout le monde a rejoint et choisi ses goûts.
+          </p>
         </div>
       ) : (
-        <p className="muted center" style={{ fontSize: "0.85rem" }}>
-          En attente que l'hôte lance la sélection…
+        <p className="footnote secondary center">
+          En attente que l’hôte lance la sélection.
         </p>
       )}
     </div>
